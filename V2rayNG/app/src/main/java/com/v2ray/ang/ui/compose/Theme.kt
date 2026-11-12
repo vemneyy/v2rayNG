@@ -2,6 +2,7 @@ package com.v2ray.ang.ui.compose
 
 import android.app.Activity
 import android.os.Build
+import androidx.compose.foundation.LocalOverscrollFactory
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -16,6 +17,7 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -176,6 +178,10 @@ fun AppTheme(
         darkTheme -> DarkColor
         else -> LightColor
     }
+    val platformOverscrollFactory = LocalOverscrollFactory.current
+    val overscrollFactory = remember(platformOverscrollFactory) {
+        platformOverscrollFactory?.let { RasterizedOverscrollFactory(it) }
+    }
     val snackbarController = rememberAppSnackbarController()
 
     val view = LocalView.current
@@ -192,7 +198,8 @@ fun AppTheme(
 
     CompositionLocalProvider(
         LocalDarkTheme provides darkTheme,
-        LocalAppSnackbar provides snackbarController
+        LocalAppSnackbar provides snackbarController,
+        LocalOverscrollFactory provides overscrollFactory
     ) {
         MaterialTheme(
             colorScheme = colorScheme

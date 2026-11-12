@@ -24,8 +24,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.CompositingStrategy
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.KeyboardType
@@ -69,11 +67,7 @@ fun FormTextField(
                     backgroundColor = MaterialTheme.colorScheme.secondary.copy(alpha = 0.4f)
                 )
             ),
-            // Android 12+ edge stretch can distort individual text glyphs in a display list.
-            // Rasterize the bounded field before stretch; remove when HWUI handles glyphs correctly.
-            modifier = Modifier
-                .fillMaxWidth()
-                .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+            modifier = Modifier.fillMaxWidth()
         )
     }
 }
@@ -144,9 +138,6 @@ fun FormDropdownField(
                     else ExposedDropdownMenuAnchorType.PrimaryNotEditable
                 )
                 .fillMaxWidth()
-                // Keep editable dropdown glyphs together during Android 12+ edge stretch.
-                // Remove with the matching FormTextField workaround when HWUI is fixed.
-                .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
                 .onFocusChanged { focusState ->
                     if (!editable && focusState.isFocused) {
                         keyboardController?.hide()
