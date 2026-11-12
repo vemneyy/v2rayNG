@@ -1,0 +1,87 @@
+name: Android CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+      - uses: actions/setup-java@v6.2.0
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@v4
+        with:
+          log-accepted-android-sdk-licenses: false
+          cmdline-tools-version: '14742923'
+          packages: 'platforms;android-37.0 build-tools;37.0.0 platform-tools ndk;30.0.16248370'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Prepare native libraries at checked-out revisions
+        shell: bash
+        run: |
+          set -euo pipefail
+          export NDK_HOME="$ANDROID_HOME/ndk/30.0.16248370"
+          bash compile-hevtun.sh
+          mkdir -p V2rayNG/app/libs
+          cp -R libs/. V2rayNG/app/libs/
+          tag=$(git -C AndroidLibXrayLite describe --tags --exact-match)
+          curl --fail --location --retry 3 \
+            "https://github.com/2dust/AndroidLibXrayLite/releases/download/$tag/libv2ray.aar" \
+            --output V2rayNG/app/libs/libv2ray.aar
+      - name: Generate ephemeral test signing key
+        shell: bash
+        run: |
+          keytool -genkeypair -noprompt -storetype JKS \
+            -keystore "$RUNNER_TEMP/test-signing.jks" \
+            -storepass android -keypass android -alias androiddebugkey \
+            -keyalg RSA -keysize 2048 -validity 3650 \
+            -dname 'CN=v2rayNG CI Test,OU=Testing,O=v2rayNG,C=ZZ'
+      - name: Test and build test-signed APKs
+        working-directory: V2rayNG
+        shell: bash
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon :app:testPlaystoreDebugUnitTest \
+            :app:compilePlaystoreDebugKotlin :app:assemblePlaystoreDebug \
+            -Pandroid.injected.signing.store.file="$RUNNER_TEMP/test-signing.jks" \
+            -Pandroid.injected.signing.store.password=android \
+            -Pandroid.injected.signing.key.alias=androiddebugkey \
+            -Pandroid.injected.signing.key.password=android
+      - name: Verify APK signatures
+        shell: bash
+        run: |
+          set -euo pipefail
+          count=0
+          while IFS= read -r -d '' apk; do
+            "$ANDROID_HOME/build-tools/37.0.0/apksigner" verify --verbose "$apk"
+            count=$((count + 1))
+          done < <(find V2rayNG/app/build/outputs/apk/playstore/debug -name '*.apk' -print0)
+          test "$count" -gt 0
+      - uses: actions/upload-artifact@v7
+        with:
+          name: playstore-test-apks
+          path: V2rayNG/app/build/outputs/apk/playstore/debug/*.apk
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: unit-test-reports
+          path: V2rayNG/app/build/reports/tests/testPlaystoreDebugUnitTest/
+          if-no-files-found: ignore
+      - name: Remove test signing key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/test-signing.jks"
